@@ -40,6 +40,8 @@
 
 > **仓库必须是 Public**，否则 Cloudflare 无法克隆（[官方限制](https://developers.cloudflare.com/workers/platform/deploy-buttons/#limitations)）。本仓库请设为公开。
 
+> ⚠️ **一键部署会克隆出一个新仓库**（如 `cf-ai-openai-gateway`），Workers Builds 连的是那个**副本**，不是源仓库 `CF_AOG`。之后要更新线上代码，请 push 到副本仓库，或在本地用 `npm run deploy` 直接部署。改 secret 也不会触发构建，需一次部署动作。
+
 ## 部署步骤
 
 **1. 点按钮**
@@ -61,7 +63,7 @@
 | **CF_AI_TOKEN** | 上面创建的 Workers AI API 令牌 |
 | **CF_ACCOUNT_ID** | 你的 Cloudflare 账户 ID |
 
-> 这 3 个 secret 由仓库里的 `.dev.vars.example` 声明，Cloudflare 会自动识别并在引导页生成输入框；每个字段的说明来自 `package.json` 的 `cloudflare.bindings`。值只会存为 Worker Secret，**不会写回仓库**。
+> 这 3 个 secret 由仓库里的 `.dev.vars.example` 声明，Cloudflare 会自动识别并在引导页生成输入框；每个字段的说明来自 `package.json` 的 `cloudflare.bindings`。**必须把每个 `replace-with-...` 占位值换成真实值**，否则 `/v1/models` 能返回但推理会 404。值只会存为 Worker Secret，不会写回仓库。
 
 **3. 点 Create and deploy**
 
@@ -295,6 +297,9 @@ const MODEL_MAP = Object.freeze({
 | 部署成功但请求返回 `500 gateway not configured` | secret 没配好 | dashboard → Worker → Settings → Variables and Secrets，或用 `wrangler secret put` 补齐 3 个值 |
 | 报错 `Could not route to /client/v4/accounts/replace-with-your-cloudflare-account-id/...` 或 `error 7003` | **`CF_ACCOUNT_ID` 仍是 `.dev.vars.example` 的占位值**，一键部署时没替换 | dashboard → Worker → Settings → Variables and Secrets 把 3 个 secret 都改成真实值；改完需重新部署一次。新版本会直接返回 `upstream credentials are still placeholder values` 并列出未填的字段 |
 | `/v1/models` 只有 2 个模型 | 旧版本硬编码了 2 个别名 | 更新到最新版本（12 个），重新部署后在 sub2api 重新拉取模型列表 |
+| push 到 `CF_AOG` 后线上没变化 | 一键部署克隆了**副本仓库**，Workers Builds 连的是副本 | push 到克隆出来的副本仓库；或本地 `npm run deploy`；或在 dashboard 的 Settings → Builds 里改连接的仓库 |
+| 改了 secret 但没生效 | 改 secret 不会触发构建 | 手动 Redeploy 一次，或往 production 分支 push 一个 commit |
+| 一键部署按钮报「GitHub 授权已过期」 | 账户级 GitHub App 授权失效 | <https://github.com/settings/installations> 卸载并重装 Cloudflare Workers and Pages，再重新打开按钮 |
 | 请求返回 401 | `GATEWAY_KEY` 与 sub2api 里填的不一致 | 两边对齐；注意不要带多余空格 |
 | 返回 `403 / error 5035` | 用了仅 Workers Paid 的模型 | 换 Free 可用模型，或升级 Paid |
 | 超出免费额度、请求失败 | Free 每天 10,000 Neurons，00:00 UTC 重置 | 等重置，或升级 Workers Paid |
