@@ -250,18 +250,39 @@ curl -s -X POST http://YOUR_SUB2API_HOST:8080/v1/chat/completions \
 | `MAX_TOKENS_CAP` | var | `512` | `max_tokens` 上限，保护免费额度 |
 | `MAX_TOKENS_DEFAULT` | var | `256` | 客户端未传 `max_tokens` 时的默认值 |
 
-## 换模型
+## 可用模型
 
-编辑 `src/worker.js` 顶部的 `MODEL_MAP`：
+`/v1/models` 返回下列 **12 个别名**（sub2api 拉取模型列表时会自动出现）。全部已用真实账户实测（2026-11-09，Workers Free 计划，HTTP 200）：
+
+| 别名 | → Workers AI 模型 | 特点 |
+| --- | --- | --- |
+| `gpt-4o-mini` / `llama-3.3-70b` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | 通用、非 reasoning，默认推荐 |
+| `gpt-4o` / `gemma-4-26b` | `@cf/google/gemma-4-26b-a4b-it` | 通用，输出稳定 |
+| `llama-4-scout` | `@cf/meta/llama-4-scout-17b-16e-instruct` | 轻量通用，便宜 |
+| `mistral-small-3.1` | `@cf/mistralai/mistral-small-3.1-24b-instruct` | 通用，非 reasoning |
+| `nemotron-3-120b` | `@cf/nvidia/nemotron-3-120b-a12b` | 大模型，质量高、单价也高 |
+| `glm-4.7-flash` | `@cf/zai-org/glm-4.7-flash` | 推理型，输出已归一到 `content` |
+| `gpt-oss-120b` / `gpt-oss-20b` | `@cf/openai/gpt-oss-*` | OpenAI 开源推理模型 |
+| `qwen3-30b` | `@cf/qwen/qwen3-30b-a3b-fp8` | 推理型，中文较好 |
+| `granite-4-micro` | `@cf/ibm-granite/granite-4.0-h-micro` | 极小极便宜（实测 0.07 Neurons） |
+
+**不含**：`@cf/moonshotai/kimi-k2.7-code`、`@cf/zai-org/glm-5.2`（实测 403 / error 5035，需 Workers Paid）；升级 Paid 后可自行加入。
+
+**直接用原始模型名**：除别名外，也可在请求里传任意 `@cf/...` 模型名（如 `@cf/openai/gpt-oss-20b`），Worker 会原样转发 —— 只是这些名字不会出现在 `/v1/models` 列表里。
+
+## 增删模型
+
+编辑 `src/worker.js` 顶部的 `MODEL_MAP`，加一行即可，`/v1/models` 与 sub2api 的模型列表自动同步：
 
 ```js
 const MODEL_MAP = Object.freeze({
   "gpt-4o-mini": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-  "gpt-4o": "@cf/google/gemma-4-26b-a4b-it",
+  "my-model": "@cf/xxx/yyy",   // ← 新增
+  // ...
 });
 ```
 
-改完 `npm test`，push 后 Workers Builds 自动部署（或手动 `npm run deploy`）。注意 Free 计划不可用 `@cf/moonshotai/kimi-k2.7-code`、`@cf/zai-org/glm-5.2`（返回 403 / error 5035），完整清单见 [Workers AI 模型目录](https://developers.cloudflare.com/workers-ai/models/)。
+改完 `npm test`，push 后 Workers Builds 自动部署（或手动 `npm run deploy`）。完整清单见 [Workers AI 模型目录](https://developers.cloudflare.com/workers-ai/models/)。
 
 ---
 
@@ -272,6 +293,8 @@ const MODEL_MAP = Object.freeze({
 | 一键部署按钮打不开 / 提示仓库不可用 | 仓库是 private，或 URL 不是 `github.com` | 把仓库设为 **Public** |
 | 引导页没有 secret 输入框 | `.dev.vars.example` 没被提交（曾被 `.gitignore` 误伤） | 确认文件在仓库根目录且已 commit |
 | 部署成功但请求返回 `500 gateway not configured` | secret 没配好 | dashboard → Worker → Settings → Variables and Secrets，或用 `wrangler secret put` 补齐 3 个值 |
+| 报错 `Could not route to /client/v4/accounts/replace-with-your-cloudflare-account-id/...` 或 `error 7003` | **`CF_ACCOUNT_ID` 仍是 `.dev.vars.example` 的占位值**，一键部署时没替换 | dashboard → Worker → Settings → Variables and Secrets 把 3 个 secret 都改成真实值；改完需重新部署一次。新版本会直接返回 `upstream credentials are still placeholder values` 并列出未填的字段 |
+| `/v1/models` 只有 2 个模型 | 旧版本硬编码了 2 个别名 | 更新到最新版本（12 个），重新部署后在 sub2api 重新拉取模型列表 |
 | 请求返回 401 | `GATEWAY_KEY` 与 sub2api 里填的不一致 | 两边对齐；注意不要带多余空格 |
 | 返回 `403 / error 5035` | 用了仅 Workers Paid 的模型 | 换 Free 可用模型，或升级 Paid |
 | 超出免费额度、请求失败 | Free 每天 10,000 Neurons，00:00 UTC 重置 | 等重置，或升级 Workers Paid |
